@@ -1,0 +1,10 @@
+{
+  "name": "SeaVolt",
+  "short_name": "SeaVolt",
+  "description": "Battery-swap energy service for fishing boats",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0b2a5b",
+  "theme_color": "#0b2a5b",
+  "icons": [{ "src": "assets/logo.png", "sizes": "1536x1024", "type": "image/png" }]
+}
