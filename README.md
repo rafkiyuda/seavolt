@@ -15,6 +15,12 @@ Mobile-first web app prototype for **SeaVolt**, a battery-swap energy service fo
 
 > Demo only: all data is simulated in the browser (localStorage). Package prices, petrol price and the QR code are illustrative.
 
+## Extras beyond the proposal
+- Live trip mode: start/end a trip with simulated IoT telemetry (speed, amps, volts, pack temperature) and BMS auto-stop at the 20% reserve
+- Step-by-step battery swap flow (book → arrive → scan QR → swap)
+- Sea conditions card, savings simulator, SeaVolt Rewards (points/levels)
+- Dark mode and installable/offline PWA (service worker)
+
 ## Run
 No build step. Serve the folder with any static server, e.g.
 

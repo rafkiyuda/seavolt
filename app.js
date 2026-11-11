@@ -50,6 +50,7 @@
     tripFilter: '30',
     trips: seedTrips(),
     help: [],
+    sailing: false, sailKm: 0, sailSec: 0, swapStep: 0, points: 120,
   });
   function seedTrips() {
     const out = [], now = Date.now();
@@ -145,8 +146,8 @@
     const col = p > RETURN_ALERT ? '#22c55e' : '#ef4444';
     return `<div class="gauge"><svg viewBox="0 0 220 220">
       <circle cx="110" cy="110" r="90" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="16" stroke-linecap="round" stroke-dasharray="${arc} ${C}"/>
-      <circle cx="110" cy="110" r="90" fill="none" stroke="${col}" stroke-width="16" stroke-linecap="round" stroke-dasharray="${filled} ${C}"/></svg>
-      <div class="center"><div class="pct">${Math.round(p)}%</div><div class="sub">≈ ${rangeKm()} km</div></div></div>`;
+      <circle cx="110" cy="110" r="90" fill="none" id="g-arc" stroke="${col}" stroke-width="16" stroke-linecap="round" stroke-dasharray="${filled} ${C}"/></svg>
+      <div class="center"><div class="pct" id="g-pct">${Math.round(p)}%</div><div class="sub" id="g-sub">≈ ${rangeKm()} km</div></div></div>`;
   }
 
   function vHome() {
@@ -154,11 +155,25 @@
     const tripsLeft = Math.max(0, kwhLeft() / TRIP_KWH);
     const low = S.battery <= RETURN_ALERT;
     return `
-      <div class="gauge-wrap">${gauge(S.battery)}</div>
+      <div class="gauge-wrap">${gauge(S.battery)}
+        <svg class="waves" viewBox="0 0 400 40" preserveAspectRatio="none" aria-hidden="true"><path d="M0 20Q25 5 50 20T100 20T150 20T200 20T250 20T300 20T350 20T400 20V40H0Z" fill="rgba(16,196,224,.25)"/><path d="M0 26Q25 14 50 26T100 26T150 26T200 26T250 26T300 26T350 26T400 26V40H0Z" fill="rgba(10,132,214,.35)"/></svg></div>
       <div class="pills">
         <div class="pill"><b>3.0 kW</b><small>Motor outboard</small></div>
         <div class="pill"><b>${(tripsLeft * 3).toFixed(1)} jam</b><small>Sisa waktu berlayar</small></div>
       </div>
+      <button class="btn ${S.sailing ? 'danger' : 'blue'}" data-act="${S.sailing ? 'end-trip' : 'start-trip'}" style="margin-bottom:12px" ${!S.sailing && S.battery <= 20 ? 'disabled' : ''}>${S.sailing ? '⏹ Akhiri trip' : S.battery <= 20 ? 'Baterai terlalu rendah – tukar dulu' : '⛵ Mulai melaut'}</button>
+      <div class="card telem ${S.sailing ? 'live' : ''}">
+        <div class="row between"><h2>Telemetri IoT</h2><span class="chip ${S.sailing ? 'ok' : ''}" id="t-state">${S.sailing ? '● LIVE' : 'Standby'}</span></div>
+        <div class="grid3">
+          <div class="stat"><b id="t-spd">${S.sailing ? '8,0' : '0'}</b><small>knot</small></div>
+          <div class="stat"><b id="t-amp">${S.sailing ? '58' : '0'}</b><small>Ampere</small></div>
+          <div class="stat"><b id="t-volt">${(48 + S.battery * 0.052).toFixed(1)}</b><small>Volt</small></div>
+          <div class="stat"><b id="t-temp">${telTemp().toFixed(0)}°C</b><small>Suhu pack</small></div>
+          <div class="stat"><b id="t-km">${S.sailKm.toFixed(1)}</b><small>km trip ini</small></div>
+          <div class="stat"><b id="t-min">${Math.floor(S.sailSec / 60)}</b><small>menit</small></div>
+        </div>
+      </div>
+      ${seaCard()}
       ${low && S.alertsOn ? `<div class="alert warn"><span>⚠️</span><div><b>Waktunya kembali ke dermaga</b>Baterai ${Math.round(S.battery)}%. Cadangan keselamatan ~20% tidak dipakai outlet aksesoris.</div></div>` : ''}
       <div class="card">
         <div class="row between"><h2>Paket baterai</h2><span class="chip ${low ? 'warn' : 'ok'}">${low ? 'Segera tukar' : 'Sehat'}</span></div>
@@ -174,10 +189,39 @@
         <div class="stat"><b>${S.trips.length}</b><small>Trip tercatat</small></div>
         <div class="stat"><b>${rp(S.trips.length * savingPerTrip())}</b><small>Estimasi hemat vs bensin</small></div>
       </div>
-      <p class="sec-title">Demo</p>
-      <div class="card row between"><span class="muted small">Simulasikan pemakaian baterai di laut</span>
-      <button class="btn sm ghost" data-act="drain">Berlayar −10%</button></div>`;
+      <p class="muted small" style="text-align:center">Demo: baterai terkuras ±20× lebih cepat saat melaut.</p>`;
   }
+
+  // ---- Live trip simulation ---------------------------------------------------
+  function telTemp() { return 29 + (S.sailing ? 6 + (100 - S.battery) * 0.07 : 0); }
+  function seaCard() {
+    const h = new Date().getHours() + new Date().getMinutes() / 60;
+    const wave = 0.5 + 0.6 * (1 + Math.sin((h - 4) / 24 * 2 * Math.PI)) / 2 + 0.2;
+    const wind = Math.round(8 + 6 * (1 + Math.sin((h - 9) / 24 * 2 * Math.PI)) / 2);
+    const ok = wave < 1.0 && wind < 15, mid = wave < 1.5 && wind < 22;
+    return `<div class="card"><div class="row between"><h2>Kondisi laut</h2><span class="chip ${ok ? 'ok' : mid ? 'warn' : 'bad'}">${ok ? 'Layak melaut' : mid ? 'Waspada' : 'Tunda melaut'}</span></div>
+      <div class="grid3"><div class="stat"><b>${wave.toFixed(1)} m</b><small>Tinggi gelombang</small></div><div class="stat"><b>${wind} kn</b><small>Angin</small></div><div class="stat"><b>${Math.round(S.battery / 100 * 3 * 60)} mnt</b><small>Daya tersisa</small></div></div>
+      <p class="muted small" style="margin-top:6px">Data simulasi, bukan prakiraan resmi BMKG.</p></div>`;
+  }
+  function updateLive() {
+    const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+    const arc = 2 * Math.PI * 90 * 0.75, C = 2 * Math.PI * 90, a = document.getElementById('g-arc');
+    if (a) { a.setAttribute('stroke-dasharray', `${arc * S.battery / 100} ${C}`); a.setAttribute('stroke', S.battery > RETURN_ALERT ? '#22c55e' : '#ef4444'); }
+    set('g-pct', Math.round(S.battery) + '%'); set('g-sub', '≈ ' + rangeKm() + ' km');
+    set('t-spd', S.speed.toFixed(1).replace('.', ',')); set('t-amp', Math.round(S.amps)); set('t-volt', (48 + S.battery * 0.052).toFixed(1));
+    set('t-temp', telTemp().toFixed(0) + '°C'); set('t-km', S.sailKm.toFixed(1)); set('t-min', Math.floor(S.sailSec / 60));
+    document.querySelectorAll('.pack b').forEach(b => b.textContent = Math.round(S.battery) + '%');
+  }
+  S.speed = 0; S.amps = 0; let warned = false;
+  setInterval(() => {
+    if (!S.sailing) return;
+    S.battery = Math.max(0, S.battery - 0.06);
+    S.speed = 8 + Math.sin(Date.now() / 4000) * 1.5; S.amps = 56 + Math.sin(Date.now() / 1500) * 4;
+    S.sailKm += S.speed * 1.852 / 3600 * 20; S.sailSec += 20;
+    if (S.battery <= RETURN_ALERT && !warned && S.alertsOn) { warned = true; toast('⚠️ Baterai ' + Math.round(S.battery) + '% – kembali ke dermaga'); }
+    if (S.battery <= 20) { act('end-trip', true); return; }
+    save(); if (currentRoute() === 'home') updateLive();
+  }, 1000);
 
   function mapSVG() {
     return `<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
@@ -198,11 +242,18 @@
     const b = S.booking;
     return `
       <div class="map">${mapSVG()}${pins}<span class="boat-dot" style="left:52%;top:62%">⛵</span></div>
-      ${b ? `<div class="alert info"><span>✅</span><div><b>Slot dipesan: ${STATIONS.find(s => s.id === b.stationId).name}</b>Pukul ${b.time} • tunjukkan QR perahu ke petugas. Target tukar &lt; 5 menit.
-        <div style="margin-top:8px"><button class="btn sm ghost" data-act="cancel-booking">Batalkan</button></div></div></div>` : ''}
+      ${b ? swapFlow(b) : ''}
       <div class="card"><div class="row"><div class="grow"><b>${sel.name}</b><div class="muted small">${sel.km} km • ${sel.ready} paket siap</div></div>
         <button class="btn sm" data-act="book" ${b ? 'disabled' : ''}>Pesan slot</button></div></div>
       <p class="sec-title">Semua stasiun</p>${list}`;
+  }
+
+  function swapFlow(b) {
+    const labels = ['Slot dipesan', 'Tiba di dermaga', 'Scan QR perahu', 'Tukar 4 pack'];
+    const btn = ['Saya sudah tiba', 'Scan QR perahu', 'Mulai tukar', ''][S.swapStep - 1];
+    return `<div class="card"><div class="row between"><h2>Tukar baterai</h2><span class="chip">${STATIONS.find(s => s.id === b.stationId).name.replace('Dock Station ', '')} • ${b.time}</span></div>
+      ${labels.map((l, i) => `<div class="step ${S.swapStep > i + 1 ? 'done' : ''}"><span class="n">${S.swapStep > i + 1 ? '✓' : i + 1}</span><div class="grow"><b>${l}</b>${S.swapStep === i + 1 && i === 2 ? '<div style="margin-top:6px">' + fakeQR('BOAT-B01') + '</div>' : ''}${S.swapStep === 4 && i === 3 ? '<div class="bar" style="margin-top:8px"><i class="swap-anim"></i></div><div class="muted small">Melepas pack lama & memasang 4 pack terisi penuh…</div>' : ''}</div></div>`).join('')}
+      <div class="row" style="margin-top:6px">${btn ? `<button class="btn" data-act="swap-next">${btn}</button>` : ''}<button class="btn ghost sm" data-act="cancel-booking">Batal</button></div></div>`;
   }
 
   function vPay() {
@@ -257,6 +308,11 @@
         <div class="row between"><span class="muted">Dengan SeaVolt</span><b>${rp(fee)}</b></div>
         <div class="row between" style="margin-top:6px"><b>Hemat</b><b style="color:#15803d">${rp(petrol - fee)}</b></div>
         <p class="muted small" style="margin-top:6px">Asumsi bensin ${rp(PETROL_PRICE)}/L (non-subsidi, ilustrasi).</p></div>
+      <div class="card"><h2>Simulator penghematan</h2>
+        <label class="muted small">Trip per bulan: <b id="sim-n-v">20</b></label><input type="range" id="sim-n" min="4" max="30" value="20" style="width:100%">
+        <label class="muted small">Harga bensin /L: <b id="sim-p-v">${rp(PETROL_PRICE)}</b></label><input type="range" id="sim-p" min="8000" max="27000" step="500" value="${PETROL_PRICE}" style="width:100%">
+        <div class="grid2" style="margin-top:8px"><div class="stat"><b id="sim-m">–</b><small>Hemat / bulan</small></div><div class="stat"><b id="sim-y">–</b><small>Hemat / tahun</small></div></div>
+        <p class="muted small" style="margin-top:6px">Tanpa beli motor: kompetitor menjual motor surya Rp200–250 juta/unit. SeaVolt Rp0 di muka.</p></div>
       <div class="card"><h2>Trip per periode</h2><div class="chart">${data.map((d, i) => `<div><i class="${i % 2 ? 'a' : ''}" style="height:${d / max * 90}%"></i></div>`).join('')}</div></div>
       <div class="card">${t.length ? t.map(x => `<div class="list-item"><div class="ic">⛵</div><div class="grow"><b>${fmtDate(x.ts)}</b><div class="muted small">${x.km} km • ${x.method}</div></div><b>${rp(x.fee)}</b></div>`).join('') : '<p class="muted">Belum ada trip pada periode ini.</p>'}</div>`;
   }
@@ -314,11 +370,23 @@
       <div class="card">${S.help.length ? S.help.map(h => `<div class="list-item"><div class="ic">🛠️</div><div class="grow"><b>${h.type}</b><div class="muted small">${h.note || '—'}</div></div><span class="chip warn">Menunggu</span></div>`).join('') : '<p class="muted">Belum ada permintaan.</p>'}</div>`;
   }
 
+  function rewardsCard() {
+    const lv = [['Pelaut', 0], ['Nakhoda', 200], ['Laksamana', 500]];
+    let i = 0; lv.forEach((x, k) => { if (S.points >= x[1]) i = k; });
+    const next = lv[i + 1], pct = next ? (S.points - lv[i][1]) / (next[1] - lv[i][1]) * 100 : 100;
+    return `<div class="card"><div class="row between"><h2>SeaVolt Rewards</h2><span class="chip warn">🏅 ${lv[i][0]}</span></div>
+      <div class="big">${S.points} <span class="muted small">poin</span></div>
+      <div class="bar" style="margin:8px 0"><i style="width:${pct}%;background:var(--amber)"></i></div>
+      <p class="muted small">${next ? `${next[1] - S.points} poin lagi menuju ${next[0]}` : 'Level tertinggi!'} • +10 poin per trip, +5 per tukar baterai, +15 ajak teman.</p>
+      <button class="btn sm ghost" data-act="refer" style="margin-top:8px">Ajak nelayan lain</button></div>`;
+  }
+
   function vMore() {
     const l = (to, ic, t, d) => `<a href="#/${to}" class="card row" style="text-decoration:none;color:inherit"><span style="font-size:24px">${ic}</span><div class="grow"><b>${t}</b><div class="muted small">${d}</div></div><span>›</span></a>`;
     return `
       <div class="card"><h3>Mode akun (demo)</h3>
         <div class="seg" id="role" style="margin:6px 0 0"><button data-r="fisher" class="${S.role === 'fisher' ? 'on' : ''}">Nelayan</button><button data-r="owner" class="${S.role === 'owner' ? 'on' : ''}">Pemilik armada</button></div></div>
+      ${rewardsCard()}
       ${l('safety', '🛡️', 'Keamanan & SOS', 'Peringatan dan bagikan lokasi')}
       ${S.role === 'owner' ? l('trips', '📊', 'Riwayat trip', 'Semua trip armada') : l('impact', '🌱', 'Dampak & ESG', 'Bensin tergantikan & CO₂ dihindari')}
       ${l('help', '🛠️', 'Bantuan & perawatan', 'Panggil teknisi di dermaga')}
@@ -346,6 +414,16 @@
       S.role = el.dataset.r; save(); location.hash = '#/' + (S.role === 'owner' ? 'fleet' : 'home'); render();
     });
     view.querySelectorAll('[data-set]').forEach(el => el.onchange = () => { S[el.dataset.set] = el.checked; save(); });
+    if (name === 'trips') {
+      const sn = $('#sim-n'), sp = $('#sim-p');
+      const calc = () => {
+        const m = +sn.value * (PETROL_L_PER_TRIP * +sp.value - FEE_PER_TRIP);
+        $('#sim-n-v').textContent = sn.value; $('#sim-p-v').textContent = rp(+sp.value);
+        $('#sim-m').textContent = rp(Math.max(0, m)); $('#sim-y').textContent = rp(Math.max(0, m * 12));
+      };
+      sn.oninput = sp.oninput = calc; calc();
+    }
+    if (S.swapStep === 4 && !swapTimer) swapTimer = setTimeout(() => { swapTimer = null; if (S.swapStep === 4) act('swap-done'); }, 2600);
     if (name === 'pay' && S.role !== 'owner') {
       let m = 'qris'; const panel = $('#pay-panel'); panel.innerHTML = payPanel(m);
       view.querySelectorAll('[data-m]').forEach(b => b.onclick = () => {
@@ -357,18 +435,28 @@
     view.querySelectorAll('[data-act]').forEach(el => el.onclick = () => act(el.dataset.act));
   }
 
-  function act(a) {
+  let swapTimer = null;
+  function act(a, auto) {
     switch (a) {
-      case 'drain':
-        S.battery = Math.max(0, S.battery - 10);
-        if (S.battery <= RETURN_ALERT && S.alertsOn) toast('⚠️ Baterai ' + S.battery + '% – kembali ke dermaga');
+      case 'start-trip': S.sailing = true; S.sailKm = 0; S.sailSec = 0; warned = false; toast('Selamat melaut! Telemetri aktif'); break;
+      case 'end-trip': {
+        S.sailing = false; S.speed = 0; S.amps = 0;
+        const km = Math.max(1, Math.round(S.sailKm));
+        S.trips.unshift({ ts: Date.now(), km, fee: FEE_PER_TRIP, method: S.credits > 0 ? 'Paket' : 'Tunai' });
+        if (S.credits > 0) S.credits--;
+        S.points += 10;
+        toast(auto ? '🔋 BMS menghentikan motor (cadangan 20%). Trip tercatat, +10 poin' : `Trip selesai: ${km} km, +10 poin`);
         break;
+      }
       case 'book': {
         const t = new Date(Date.now() + 20 * 6e4);
         S.booking = { stationId: S.stationId, time: t.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) };
-        toast('Slot tukar baterai dipesan'); break;
+        S.swapStep = 1; toast('Slot tukar baterai dipesan'); break;
       }
-      case 'cancel-booking': S.booking = null; toast('Pemesanan dibatalkan'); break;
+      case 'swap-next': S.swapStep = Math.min(4, S.swapStep + 1); break;
+      case 'swap-done': S.battery = 100; S.booking = null; S.swapStep = 0; S.points += 5; warned = false; toast('✅ Tukar selesai • baterai 100% • +5 poin'); break;
+      case 'refer': S.points += 15; toast('Tautan undangan disalin (demo) • +15 poin'); break;
+      case 'cancel-booking': S.booking = null; S.swapStep = 0; clearTimeout(swapTimer); swapTimer = null; toast('Pemesanan dibatalkan'); break;
       case 'pay': {
         const plan = PLANS.find(p => p.id === S.plan);
         const method = { qris: 'QRIS', transfer: 'Transfer', cash: 'Tunai' }[$('#view').dataset.method || 'qris'];
@@ -398,4 +486,5 @@
 
   window.addEventListener('hashchange', render);
   render();
+  if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
