@@ -140,3 +140,11 @@ input[type=range]{accent-color:var(--blue);margin:4px 0 10px}
   .topbar .brand{background:#fff}
   .stat,.pack,.list-item .ic{background:#0d1d3d}
 }
+
+/* Always mobile view: on wide screens show the app inside a phone frame */
+@media (min-width:600px){
+  body{display:grid;place-items:center;min-height:100dvh;background:radial-gradient(circle at 30% 20%,#1b4a8a,#071a38)}
+  .app{width:390px;max-width:390px;height:min(844px,96dvh);border-radius:44px;border:10px solid #0a0f1c;box-shadow:0 30px 80px rgba(0,0,0,.5),0 0 0 2px #2b3548}
+  .app::before{content:"";position:absolute;top:8px;left:50%;transform:translateX(-50%);width:96px;height:22px;background:#0a0f1c;border-radius:14px;z-index:30}
+  .topbar{padding-top:34px}
+}
